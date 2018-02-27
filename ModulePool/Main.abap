@@ -31,7 +31,9 @@ controls: tc_pokedex type tableview using screen 0102.
 *----- global table para tela 0102.
 data: gt_pokedex type standard table of yxx_pokedex.
 
-
+*----- Flag para a tela de ADICIONAR / EDITAR.
+" Obs: CHAR de 1 ja vem implicito. Não precisa declarar.
+data: g_edit.
 
 
 
@@ -152,16 +154,18 @@ endmodule.                 " GET_DATA_0101  OUTPUT
 *----------------------------------------------------------------------*
 form get_data_0101 .
 
+  data: l_lines type i.
 
-  data: l_ficha type yxx_pokedex-ficha.
+*  if gt_pokedex[] is initial.
+  select * from yxx_pokedex into table gt_pokedex.
+*  endif.
 
-  "... Pega ultimo registro
-  select max( ficha ) from yxx_pokedex into l_ficha.
+  describe table gt_pokedex lines l_lines.
 
-  g_qtd_animais = l_ficha.
+  g_qtd_animais = l_lines.
 
-  select single * from yxx_pokedex into  gw_pokedex
-    where ficha = l_ficha.
+  clear gw_pokedex.
+  read table gt_pokedex into gw_pokedex index l_lines.
 
 
 
@@ -211,6 +215,11 @@ module status_0200 output.
   set pf-status '0200'.
   set titlebar '0200'.
 
+  "Check para limpar apenas se estiver adicionando.
+  check g_edit is initial.
+
+  clear yxx_pokedex.
+
 endmodule.                 " STATUS_0200  OUTPUT
 *&---------------------------------------------------------------------*
 *&      Module  USER_COMMAND_0200  INPUT
@@ -239,33 +248,157 @@ endmodule.                 " USER_COMMAND_0200  INPUT
 *----------------------------------------------------------------------*
 form check_ok .
 
-  if yxx_pokedex-idade is initial or
-    yxx_pokedex-nome is initial or
-    yxx_pokedex-telefone is initial or
-    yxx_pokedex-raca is initial or
-    yxx_pokedex-religiao is initial.
+  " Valida se campos esta vazio
+  if yxx_pokedex-nome is initial.
 
     message s001 display like 'E'.
     exit.
 
   endif.
 
-  "Adiciona no banco
-  insert yxx_pokedex from yxx_pokedex.
 
-  if sy-subrc = 0.
+  " Verifica se esta adicionando ou alterando.
+  if g_edit = space.
 
-    message s002.
+    "Gera um novo numero a partir do range criado via SNRO
+    perform get_num_ficha.
+    "Adiciona no banco
+    insert yxx_pokedex from yxx_pokedex.
 
-    " Adiiona o registro inserido na table control da tela 0102.
-    " gt_pokedex é referencia naquela table control.
-    append yxx_pokedex to gt_pokedex.
+    " Verifica se erro
+    if sy-subrc = 0.
+      message s002.
+      " Adiciona o registro inserido na table control da tela 0102.
+      " gt_pokedex é referencia naquela table control.
+      append yxx_pokedex to gt_pokedex.
+    else.
+      message s003 display like 'E'.
+    endif.
 
+    " Se Edição da linha.
   else.
-    message s003 display like 'E'.
+
+    modify yxx_pokedex from yxx_pokedex.
+
+    " Verifica se erro
+    if sy-subrc = 0.
+      message s002.
+      " Atualiza table control.
+      " gt_pokedex é referencia naquela table control.
+      modify gt_pokedex from yxx_pokedex
+      transporting
+      ficha
+      nome
+      telefone
+      idade
+      peso
+      raca
+      religiao
+      v_raiva
+      v_pulga
+      v_sarna
+      where ficha = yxx_pokedex-ficha.
+
+    else.
+      message s003 display like 'E'.
+    endif.
 
   endif.
 
 
+  " Volta para a tela anterior.
+  set screen 0. leave screen.
 
 endform.                    " CHECK_OK
+*&---------------------------------------------------------------------*
+*&      Form  GET_NUM_FICHA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+form get_num_ficha .
+
+
+  call function 'NUMBER_GET_NEXT'
+    exporting
+      nr_range_nr                   = 'PK'
+      object                        = 'YXX_PK'
+*     QUANTITY                      = '1'
+*     SUBOBJECT                     = ' '
+*     TOYEAR                        = '0000'
+*     IGNORE_BUFFER                 = ' '
+   importing
+      number                        = yxx_pokedex-ficha
+*     QUANTITY                      =
+*     RETURNCODE                    =
+*   EXCEPTIONS
+*     INTERVAL_NOT_FOUND            = 1
+*     NUMBER_RANGE_NOT_INTERN       = 2
+*     OBJECT_NOT_FOUND              = 3
+*     QUANTITY_IS_0                 = 4
+*     QUANTITY_IS_NOT_1             = 5
+*     INTERVAL_OVERFLOW             = 6
+*     BUFFER_OVERFLOW               = 7
+*     OTHERS                        = 8
+            .
+  if sy-subrc <> 0.
+* Implement suitable error handling here
+  endif.
+
+
+
+endform.                    " GET_NUM_FICHA
+*&---------------------------------------------------------------------*
+*&      Module  GET_ATTRIBUTES_TC  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+module get_attributes_tc output.
+  describe table gt_pokedex lines tc_pokedex-lines.
+endmodule.                 " GET_ATTRIBUTES_TC  OUTPUT
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0102  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+module user_command_0102 input.
+
+  case sy-ucomm.
+    when 'EDIT'.
+      perform edit_line.
+    when others.
+  endcase.
+
+
+endmodule.                 " USER_COMMAND_0102  INPUT
+*&---------------------------------------------------------------------*
+*&      Form  EDIT_LINE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+form edit_line .
+
+  data : l_line type i.
+
+  g_edit = 'X'.
+
+  "Traz o numero da linha atual.
+  get cursor line l_line.
+  " AJusta para que traga a linha correta.
+  l_line = l_line + tc_pokedex-top_line - 1.
+
+  "Le os registros da linha seleciona e joga para o yxx_pokedex.
+  clear yxx_pokedex.
+  read table gt_pokedex into yxx_pokedex index l_line.
+
+  call screen 0200 starting at 10 10.
+
+  clear g_edit.
+
+
+endform.                    " EDIT_LINE
