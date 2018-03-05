@@ -21,6 +21,12 @@ data: gt_lhtml type standard table of w3html,
 *---- Variável para mudar o numero da tela que aparece no frame.
 data  g_tela  type sy-dynnr value '0001'.
 
+*--- Variáveis para o ALV
+data: go_alv_container type ref to cl_gui_custom_container,
+      go_alv           type ref to cl_gui_alv_grid,
+      gs_layout        type lvc_s_layo.
+
+
 *----- Tabela interna para o registro da tela 0101 e qtd
 data: gw_pokedex type yxx_pokedex.
 data: g_qtd_animais type i.
@@ -30,14 +36,24 @@ controls: tc_pokedex type tableview using screen 0102.
 
 *----- global table para tela 0102.
 data: gt_pokedex type standard table of yxx_pokedex.
+*----- global table para tela 0103. Vai usar no ALV
+data: gt_pokedex_alv type standard table of yxx_pokedex.
 
 *----- Flag para a tela de ADICIONAR / EDITAR.
 " Obs: CHAR de 1 ja vem implicito. Não precisa declarar.
 data: g_edit.
 
 
+*-- Declaração da tela usada na seleção do ALV - Tela 0103.
+selection-screen begin of screen 9999 as subscreen.
+selection-screen begin of block b1  with frame title text-001.
 
+select-options: ficha for yxx_pokedex-ficha,
+                nome for yxx_pokedex-nome.
 
+selection-screen end of block b1.
+selection-screen end of screen 9999.
+*-- Declaração da tela usada na seleção do ALV - Tela 0103.
 
 initialization.
 
@@ -52,6 +68,9 @@ module status_0100 output.
   case g_tela.
     when '0102'.
       set pf-status '0102'.
+    when '0103'.
+      set pf-status '0103'.
+
     when others.
       set pf-status '0100'.
   endcase.
@@ -402,3 +421,72 @@ form edit_line .
 
 
 endform.                    " EDIT_LINE
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0103  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+module user_command_0103 input.
+
+  case sy-ucomm.
+    when 'EXEC'.
+      perform exec.
+    when others.
+  endcase.
+
+
+endmodule.                 " USER_COMMAND_0103  INPUT
+*&---------------------------------------------------------------------*
+*&      Module  START_ALV  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+module start_alv output.
+
+*-- Para nao criar o objeto denovo.
+CHECK go_alv_container is INITIAL.
+
+*-- parte copiada como base do progrma BCALV_GRID_02
+  create object go_alv_container
+    exporting
+      container_name = 'CC_ALV'.
+
+* create an instance of alv control
+  create object go_alv
+    exporting
+      i_parent = go_alv_container.
+
+  gs_layout-grid_title = 'Relatório'(100).
+  gs_layout-cwidth_opt = 'X'.
+
+* Set a titlebar for the grid control
+*
+  gs_layout-grid_title = 'Relatório'(100).
+
+  call method go_alv->set_table_for_first_display
+    exporting
+      i_structure_name = 'YXX_POKEDEX'
+      is_layout        = gs_layout
+    changing
+      it_outtab        = gt_pokedex_alv.
+
+endmodule.                 " START_ALV  OUTPUT
+*&---------------------------------------------------------------------*
+*&      Form  EXEC
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+form exec .
+
+  refresh gt_pokedex_alv[].
+
+  select * from yxx_pokedex into table gt_pokedex_alv
+    where nome in nome
+    and ficha in ficha.
+
+    call METHOD go_alv->refresh_table_display( ).
+
+endform.                    " EXEC
