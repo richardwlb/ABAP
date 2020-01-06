@@ -4,7 +4,7 @@
 -> Importing	I_BIN_SIZE	TYPE I	
 -> Importing	I_ATTACHMENT	TYPE TTY_SOLIX	
 -> Importing	I_FILE_NAME	TYPE STRING OPTIONAL	
-<- Exporting	E_ZIP_BIN	TYPE SOLIX_TAB	GBT: SOLIX as Table Type
+<- Exporting	E_ZIP_BIN	TYPE SOLIX_TAB	GBT: "SOLIX as Table Type
 *--- Parameters
 
 
